@@ -6,9 +6,23 @@ universe variable u
 
 namespace data.containers
 
+inductive color
+| red : color
+| black : color
+
+namespace color
+
+instance : decidable_eq color := by tactic.mk_dec_eq_instance
+
+end color
+
+open color
+
+
+
 inductive bintree (E : Type _)
 | empty {} : bintree
-| bin : bintree → E → bintree → bintree
+| bin : color → bintree → E → bintree → bintree
 
 namespace bintree
 section
@@ -16,17 +30,34 @@ parameters {E : Type _}
 
 def to_list : bintree E → list E
 | empty := []
-| (bin l x r) := l.to_list ++ x :: r.to_list
+| (bin _ l x r) := l.to_list ++ x :: r.to_list
 
 end
 
 section
 
+
 parameters {E : Type _}
 parameters [has_preordering E]
 
 /-- Create a tree with a single element. -/
-def singleton (x : E) : bintree E := bin empty x empty
+def singleton (x : E) : bintree E := bin black empty x empty
+
+protected
+def tree_color : bintree E → color
+| empty := black
+| (bin c l x r) := c
+
+def set_black : bintree E → bintree E
+| empty := empty
+| (bin c l x r) := bin black l x r
+
+@[simp]
+def set_black_is_black (t : bintree E) : tree_color (set_black t) = black :=
+begin
+  cases t; simp [set_black, bintree.tree_color],
+end
+
 
 -----------------------------------------------------------------------
 -- all_lt
@@ -34,11 +65,11 @@ def singleton (x : E) : bintree E := bin empty x empty
 /- Return true if keys on right spine of bintree are less then k. -/
 def all_lt : bintree E → E → Prop
 | empty high := true
-| (bin l x r) high := has_ordering.cmp x high = ordering.lt ∧ all_lt r high
+| (bin _ l x r) high := has_ordering.cmp x high = ordering.lt ∧ all_lt r high
 
 instance all_lt.decidable : ∀(t:bintree E) (x: E), decidable (all_lt t x)
 | empty y := begin unfold all_lt, apply_instance, end
-| (bin l x r) y :=
+| (bin _ l x r) y :=
   begin
     unfold all_lt,
     exact @and.decidable _ _ (by apply_instance) (all_lt.decidable r y),
@@ -53,7 +84,7 @@ begin
   intros t y0 y1,
   induction t,
   case empty { simp [all_lt], },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [all_lt],
 
     have h0 := has_preordering.lt_of_lt_of_lt x y0 y1,
@@ -75,11 +106,11 @@ end
 /- Return true if keys on left spine of bintree are greater then k. -/
 def all_gt : bintree E → E → Prop
 | empty y := true
-| (bin l x r) y := all_gt l y ∧ has_ordering.cmp y x = ordering.lt
+| (bin _ l x r) y := all_gt l y ∧ has_ordering.cmp y x = ordering.lt
 
 instance all_gt.decidable : ∀(t:bintree E) (y: E), decidable (all_gt t y)
 | empty y := begin unfold all_gt, apply_instance, end
-| (bin l x r) y :=
+| (bin _ l x r) y :=
   begin
     unfold all_gt,
     exact @and.decidable _ _ (all_gt.decidable l y) (by apply_instance),
@@ -94,7 +125,7 @@ begin
   intros t y0 y1,
   induction t,
   case empty { simp [all_gt], },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [all_gt],
 
     have h0 := has_preordering.lt_of_lt_of_lt y0 y1 x,
@@ -115,11 +146,11 @@ end
 
 def is_ordered : bintree E → Prop
 | empty := true
-| (bin l x r) := is_ordered l ∧ all_lt l x ∧ all_gt r x ∧ is_ordered r
+| (bin _ l x r) := is_ordered l ∧ all_lt l x ∧ all_gt r x ∧ is_ordered r
 
 instance is_ordered.decidable : decidable_pred is_ordered
 | empty := begin unfold is_ordered, apply_instance, end
-| (bin l x r) :=
+| (bin _ l x r) :=
   begin
     unfold is_ordered,
     apply @and.decidable _ _ _ _, exact (is_ordered.decidable l),
@@ -138,7 +169,7 @@ parameters (p : E → ordering) [monotonic_find p]
 /-- Lookup an element that matches the ordering. -/
 def lookup : bintree E → option E
 | empty := none
-| (bin l x r) :=
+| (bin _ l x r) :=
   match p x with
   | ordering.lt := lookup r
   | ordering.eq := x
@@ -154,7 +185,7 @@ theorem find_eq_is_none_of_all_gt {t : bintree E} {y : E}
 begin
   induction t,
   case empty { intros, trivial, },
-  case bin l x r ind_l ind_r {
+  case bin _ l x r ind_l ind_r {
     have h0 : ordering.eq ≠ ordering.gt := dec_trivial,
     have h4 : (eq ordering.eq ∘ p) x = (ordering.eq = p x) := by simp [function.comp],
 
@@ -177,7 +208,7 @@ theorem find_eq_is_none_of_all_lt {t : bintree E} {y : E}
 begin
   induction t,
   case empty { intros, trivial, },
-  case bin l x r ind_l ind_r {
+  case bin _ l x r ind_l ind_r {
     have h0 : ordering.eq ≠ ordering.lt := dec_trivial,
     have h4 : (eq ordering.eq ∘ p) x = (ordering.eq = p x) := by simp [function.comp],
 
@@ -197,7 +228,7 @@ begin
   intros t,
   induction t,
   case bintree.empty { intro is_ordered_t, refl, },
-  case bintree.bin l x r l_ind r_ind {
+  case bintree.bin _ l x r l_ind r_ind {
     have h0 : ordering.eq ≠ ordering.lt := dec_trivial,
     have h1 : ordering.eq ≠ ordering.gt := dec_trivial,
     have h2 : ordering.lt ≤ ordering.eq := dec_trivial,
@@ -235,74 +266,293 @@ end lookup
 -----------------------------------------------------------------------
 -- insert
 
-def insert (y : E) : bintree E → bintree E
-| empty := singleton y
-| (bin l x r) :=
+def balanceL : color → bintree E → E → bintree E → bintree E
+| black (bin red (bin red t0 k0 t1) k1 t2) k2 t3 := bin red (bin black t0 k0 t1) k1 (bin black t2 k2 t3)
+| black (bin red t0 k0 (bin red t1 k1 t2)) k2 t3 := bin red (bin black t0 k0 t1) k1 (bin black t2 k2 t3)
+| c l k r := bin c l k r
+
+def balanceR : color → bintree E → E → bintree E → bintree E
+| black t0 k0 (bin red (bin red t1 k1 t2) k2 t3) := bin red (bin black t0 k0 t1) k1 (bin black t2 k2 t3)
+| black t0 k0 (bin red t1 k1 (bin red t2 k2 t3)) := bin red (bin black t0 k0 t1) k1 (bin black t2 k2 t3)
+| color l k r := bin color l k r
+
+def insert_core (y : E) : bintree E → bintree E
+| empty := bin red empty y empty
+| (bin color l x r) :=
   match has_ordering.cmp y x with
-  | ordering.lt := bin (insert l) x r
-  | ordering.eq := bin l y r
-  | ordering.gt := bin l x (insert r)
+  | ordering.lt := balanceL color (insert_core l) x r
+  | ordering.eq := bin color l y r
+  | ordering.gt := balanceR color l x (insert_core r)
   end
 
-/-- Prove inserting into a smaller tree is still smaller. -/
-def all_lt_insert (y : E) (t : bintree E) (bnd : E)
+def insert (y : E) (t : bintree E) : bintree E := set_black (insert_core y t)
+
+def all_lt_balanceL (c : color) (y : E) (l r : bintree E) (bnd : E)
+  (all_lt_l : all_lt l y)
   (key_lt_u : has_ordering.cmp y bnd = ordering.lt)
-  (pre : all_lt t bnd)
-: all_lt (insert y t) bnd :=
+  (all_lt_r : all_lt r bnd)
+: all_lt (balanceL c l y r) bnd :=
 begin
-  induction t,
-  case empty {
-    simp [insert, singleton, all_lt, *],
-  },
-  case bin l x r l_ind r_ind {
-    simp only [all_lt] at pre,
-    simp only [insert],
-    cases (has_ordering.cmp y x); simp only [insert, all_lt]; cc,
+  cases c,
+  case red { simp [balanceL, all_lt, *], },
+  cases l,
+  case empty { simp [balanceL, all_lt, *], },
+  case bin lc ll lx lr {
+    cases lc;
+      cases ll with llc lll llx llr;
+      try { cases llc };
+      cases lr with lrc lrl lrx lrr;
+      try { cases lrc },
+    all_goals {
+      simp [all_lt] at all_lt_l,
+      simp [balanceL, all_lt, *],
+    },
+    all_goals {
+      apply has_preordering.lt_of_lt_of_lt _ _ _ _ key_lt_u,
+      simp [*],
+    },
   },
 end
 
-def all_gt_insert (y : E) (t : bintree E) (bnd : E)
-  (key_lt_u : has_ordering.cmp bnd y = ordering.lt)
-  (pre : all_gt t bnd)
-: all_gt (insert y t) bnd :=
+def all_gt_balanceL (c : color) (y : E) (l r : bintree E) (bnd : E)
+  (iso : is_ordered l)
+  (bnd_lt_y : has_ordering.cmp bnd y = ordering.lt)
+  (all_lt_r : all_gt l bnd)
+: all_gt (balanceL c l y r) bnd :=
+begin
+  cases c,
+  case red { simp [balanceL, all_gt, *], },
+  cases l,
+  case empty { simp [balanceL, all_gt, *], },
+  case bin lc ll lx lr {
+    cases lc;
+      cases ll with llc lll llx llr;
+      try { cases llc };
+      cases lr with lrc lrl lrx lrr;
+      try { cases lrc },
+    all_goals {
+      simp [is_ordered, all_gt] at iso,
+      simp [all_gt] at all_lt_r,
+      simp [balanceL, all_gt, *],
+    },
+    all_goals {
+      apply has_preordering.lt_of_lt_of_lt bnd lx lrx; cc,
+    },
+  },
+end
+
+def all_lt_balanceR (c : color) (y : E) (l r : bintree E) (bnd : E)
+  (iso : is_ordered r)
+  (key_lt_u : has_ordering.cmp y bnd = ordering.lt)
+  (all_lt_r : all_lt r bnd)
+: all_lt (balanceR c l y r) bnd :=
+begin
+  cases c,
+  case red { simp [balanceR, all_lt, *], },
+  case black {
+  cases r,
+  case empty { simp [balanceR, all_lt, *], },
+  case bin rc rl rx rr {
+    cases rc;
+      cases rl with rlc rll rlx rlr;
+      try { cases rlc };
+      cases rr with rrc rrl rrx rrr;
+      try { cases rrc },
+    all_goals {
+      simp [is_ordered, all_lt, all_gt] at iso,
+      simp [all_lt] at all_lt_r,
+      simp [balanceR, all_lt, *],
+    },
+    -- Remaining obligations have form:
+    --  has_ordering.cmp rlx bnd = ordering.lt
+    all_goals {
+      apply has_preordering.lt_of_lt_of_lt rlx rx bnd; cc,
+    },
+  },
+  },
+end
+
+def all_gt_balanceR (c : color) (y : E) (l r : bintree E) (bnd : E)
+  (iso : is_ordered r)
+  (bnd_lt_y : has_ordering.cmp bnd y = ordering.lt)
+  (all_gt_l : all_gt l bnd)
+  (all_gt_r : all_gt r y)
+: all_gt (balanceR c l y r) bnd :=
+begin
+  cases c,
+  case red { simp [balanceR, all_gt, *], },
+  cases r,
+  case empty { simp [balanceR, all_gt, *], },
+  case bin rc rl rx rr {
+    cases rc;
+      cases rl with rlc rll rlx rlr;
+      try { cases rlc };
+      cases rr with rrc rrl rrx rrr;
+      try { cases rrc },
+    all_goals {
+      simp [is_ordered, all_lt, all_gt] at iso,
+      simp [all_gt] at all_gt_r,
+      simp [balanceR, all_gt, *],
+    },
+   all_goals {
+     try { apply has_preordering.lt_of_lt_of_lt bnd y rx; cc, },
+     try { apply has_preordering.lt_of_lt_of_lt bnd y rlx; cc, },
+   },
+  },
+end
+
+
+def is_ordered_balanceL (c : color) (y : E) (l r : bintree E)
+  (iso_l : is_ordered l)
+  (all_lt_l_y : all_lt l y)
+  (all_gt_r_y : all_gt r y)
+  (iso_r : is_ordered r)
+: is_ordered (balanceL c l y r) :=
+begin
+  cases c,
+  case red { simp [balanceL, is_ordered, *], },
+  case black {
+    cases l,
+    case empty { simp [balanceL, is_ordered, *], },
+    case bin lc ll lx lr {
+      cases lc;
+        cases ll with llc lll llx llr;
+        try { cases llc };
+        cases lr with lrc lrl lrx lrr;
+        try { cases lrc },
+      all_goals {
+        simp [is_ordered, all_lt, all_gt] at iso_l,
+        simp [all_lt] at all_lt_l_y,
+        simp [balanceL, all_lt, all_gt, is_ordered, *],
+      },
+    },
+  },
+end
+
+def is_ordered_balanceR (c : color) (y : E) (l r : bintree E)
+  (iso_l : is_ordered l)
+  (all_lt_l_y : all_lt l y)
+  (all_gt_r_y : all_gt r y)
+  (iso_r : is_ordered r)
+: is_ordered (balanceR c l y r) :=
+begin
+  cases c,
+  case red { simp [balanceR, is_ordered, *], },
+  case black {
+    cases r,
+    case empty { simp [balanceR, is_ordered, *], },
+    case bin lc ll lx lr {
+      cases lc;
+        cases ll with llc lll llx llr;
+        try { cases llc };
+        cases lr with lrc lrl lrx lrr;
+        try { cases lrc },
+      all_goals {
+        simp [is_ordered, all_lt, all_gt] at iso_r,
+        simp [all_gt] at all_gt_r_y,
+        simp [balanceR, all_lt, all_gt, is_ordered, *],
+      },
+    },
+  },
+end
+
+def insert_core_preserves (y : E) {t : bintree E}
+  (iso : is_ordered t)
+: is_ordered (insert_core y t)
+∧ (∀ (bnd : E),
+    has_ordering.cmp y bnd = ordering.lt
+               → all_lt t bnd
+              → all_lt (insert_core y t) bnd)
+∧ (∀ (bnd : E),
+    has_ordering.cmp bnd y = ordering.lt
+               → all_gt t bnd
+               → all_gt (insert_core y t) bnd) :=
 begin
   induction t,
   case empty {
-    simp [insert, singleton, all_gt, *],
+    intros,
+    simp [insert_core, all_lt, all_gt, is_ordered, *],
   },
-  case bin l x r l_ind r_ind {
-    simp only [all_gt] at pre,
-    simp only [insert],
-    cases (has_ordering.cmp y x); simp only [insert, all_gt]; cc,
+  case bin c l x r l_ind r_ind {
+    simp only [is_ordered] at iso,
+    simp only [iso, true_implies_iff] at l_ind r_ind,
+      destruct (has_ordering.cmp y x);
+      intro cmp_y_s;
+      simp only [cmp_y_s, insert_core, all_lt],
+    { apply and.intro,
+      { apply is_ordered_balanceL,
+        apply and.left l_ind,
+        apply and.left (and.right l_ind),
+        all_goals { simp [*], },
+      },
+      apply and.intro,
+      { intros bnd cmp_y_bnd pr,
+        apply all_lt_balanceL,
+        all_goals { simp [*], },
+      },
+      { intros bnd cmp_y_bnd pr,
+        simp [all_gt] at pr,
+        apply all_gt_balanceL,
+        all_goals { simp [*], },
+      }
+    },
+    { simp [is_ordered, *],
+      apply and.intro,
+      { apply all_gt_congr r y x; simp [*],
+      },
+      apply and.intro,
+      { have h0 := has_preordering.eq_symm y x,
+        apply all_lt_congr l x y; simp [*],
+      },
+      simp [all_gt],
+      apply and.intro; cc,
+    },
+    { apply and.intro,
+      { apply is_ordered_balanceR,
+        cc,
+        cc,
+        { apply and.right (and.right r_ind),
+          simp [has_preordering.gt_lt_symm, *] at *,
+          cc,
+        },
+        cc,
+      },
+      apply and.intro,
+      { intros,
+        apply all_lt_balanceR,
+        cc,
+        cc,
+        { apply and.left (and.right r_ind); cc, },
+      },
+      { simp [all_gt],
+        intros,
+        simp [has_preordering.gt_lt_symm, *] at *,
+        apply all_gt_balanceR,
+        cc,
+        cc,
+        cc,
+        { apply and.left (and.right r_ind); cc,
+        },
+      },
+    },
   },
+end
+
+theorem is_ordered_set_black (t : bintree E)
+: is_ordered t → is_ordered (set_black t) :=
+begin
+  cases t; simp [set_black, is_ordered]; intros; simp [*],
 end
 
 theorem is_ordered_insert (y : E) (t : bintree E)
 : is_ordered t → is_ordered (insert y t) :=
 begin
-  induction t,
-  case empty {
-    simp [insert, singleton, is_ordered, all_gt, all_lt],
-  },
-  case bin l x r l_ind r_ind {
-    simp only [is_ordered, insert],
-    intro props,
-    cases props with l_ordered props,
-    cases props with all_lt_l props,
-    cases props with all_gt_r r_ordered,
-    destruct (has_ordering.cmp y x); intro ordering_eq; simp [ordering_eq, insert, is_ordered, *],
-    { apply all_lt_insert; cc, },
-    { have k_key_eq := has_preordering.eq_symm _ _ ordering_eq,
-      have h_lt := all_lt_congr l x y,
-      simp [k_key_eq, le_refl] at h_lt,
-      have h_gt:= all_gt_congr r y x,
-      simp [ordering_eq, le_refl] at h_gt,
-      simp [*],
-    },
-    { simp only [has_preordering.gt_lt_symm] at ordering_eq,
-      apply all_gt_insert; cc,
-    },
-  }
+  intro iso,
+
+  simp [insert],
+  apply is_ordered_set_black,
+  have h := insert_core_preserves y iso,
+  cc,
 end
 
 def key_is_lt (y : E) (p : E) : Prop := has_ordering.cmp p y = ordering.lt
@@ -320,7 +570,7 @@ theorem filter_lt_of_all_lt (t : bintree E) (y : E)
 begin
   induction t,
   case empty { intros, refl, },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [is_ordered, all_lt, to_list, list.filter, key_is_lt],
     intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x all_lt_r_y cmp_lt,
     have all_lt_ly := all_lt_congr l x y all_lt_l_x (by simp [cmp_lt]),
@@ -333,7 +583,7 @@ theorem filter_gt_of_all_lt (t : bintree E) (y : E)
 begin
   induction t,
   case empty { intros, refl, },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [is_ordered, all_lt, to_list, list.filter, key_is_gt],
     intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x all_lt_r_y cmp_lt,
     have all_lt_ly := all_lt_congr l x y all_lt_l_x (by simp [cmp_lt]),
@@ -350,7 +600,7 @@ end
 begin
   induction t,
   case empty { intros, refl, },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [is_ordered, all_gt, to_list, list.filter, key_is_gt],
     intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x all_lt_l_y cmp_lt,
     have all_gt_ry := all_gt_congr r y x all_gt_r_x (by simp [cmp_lt]),
@@ -363,7 +613,7 @@ theorem filter_lt_of_all_gt (t : bintree E) (y : E)
 begin
   induction t,
   case empty { intros, refl, },
-  case bin l x r l_ind r_ind {
+  case bin _ l x r l_ind r_ind {
     simp [is_ordered, all_gt, to_list, list.filter, key_is_lt],
     intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x all_lt_l_y cmp_lt,
     have all_gt_ry := all_gt_congr r y x all_gt_r_x (by simp [cmp_lt]),
@@ -375,17 +625,64 @@ begin
   },
 end
 
+theorem to_list_set_black (t : bintree E) : (set_black t).to_list = t.to_list :=
+begin
+  cases t; simp [set_black, to_list],
+end
 
-theorem to_list_insert (y : E) (t : bintree E)
-: is_ordered t → to_list (insert y t)
+theorem to_list_balanceL (c : color) (l r : bintree E) (x : E)
+: to_list (balanceL c l x r)  = to_list l ++ [x] ++ to_list r :=
+begin
+  cases c,
+  case red { simp [balanceL, to_list, *], },
+  case black {
+    cases l,
+    case empty { simp [balanceL, to_list, *], },
+    case bin lc ll lx lr {
+      cases lc;
+        cases ll with llc lll llx llr;
+        try { cases llc };
+        cases lr with lrc lrl lrx lrr;
+        try { cases lrc },
+      all_goals {
+        simp [balanceL, to_list, *],
+      },
+    },
+  },
+end
+
+theorem to_list_balanceR (c : color) (l r : bintree E) (x : E)
+: to_list (balanceR c l x r)  = to_list l ++ [x] ++ to_list r :=
+begin
+  cases c,
+  case red { simp [balanceR, to_list, *], },
+  case black {
+    cases r,
+    case empty { simp [balanceR, to_list, *], },
+    case bin rc rl rx rr {
+      cases rc;
+        cases rl with rlc rll rlx rlr;
+        try { cases rlc };
+        cases rr with rrc rrl rrx rrr;
+        try { cases rrc },
+      all_goals {
+        simp [balanceR, to_list, *],
+      },
+    },
+  },
+
+end
+
+theorem to_list_insert_core (y : E) (t : bintree E)
+: is_ordered t → to_list (insert_core y t)
     = t.to_list.filter (key_is_lt y) ++ y :: t.to_list.filter (key_is_gt y) :=
 begin
   induction t,
   case empty {
-    simp [insert, singleton, to_list],
+    simp [insert_core, to_list],
   },
-  case bin l x r l_ind r_ind {
-    simp [insert, to_list, is_ordered, list.filter, key_is_lt, key_is_gt],
+  case bin color l x r l_ind r_ind {
+    simp [insert_core, to_list, is_ordered, list.filter, key_is_lt, key_is_gt],
 
     have g1 : (ordering.gt ≠ ordering.lt), exact dec_trivial,
     have g2 : ordering.lt ≤ ordering.eq, exact dec_trivial,
@@ -395,22 +692,27 @@ begin
     have cmp_k_key_eq : has_ordering.cmp x y = (has_ordering.cmp y x).swap,
     { rw [has_preordering.swap_cmp], },
 
+    intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x,
     have all_lt_r_key := all_lt_congr l x y,
     have all_gt_r_key := all_gt_congr r y x,
     have l_lt := filter_lt_of_all_lt l y,
     have l_gt := filter_gt_of_all_lt l y,
     have r_lt := filter_lt_of_all_gt r y,
     have r_gt := filter_gt_of_all_gt r y,
-    intros is_ordered_l is_ordered_r all_gt_r_x all_lt_l_x,
-    revert all_lt_r_key all_gt_r_key l_lt l_gt r_lt r_gt,
 
     destruct (has_ordering.cmp y x);
       intros cmp_key_k;
-      simp only [cmp_key_k];
       simp [cmp_key_k, ordering.swap] at cmp_k_key_eq;
-      intros all_lt_r_key all_gt_r_key l_lt l_gt r_lt r_gt;
-      simp [*, insert, to_list],
+      simp [*, insert_core, to_list, to_list_balanceL, to_list_balanceR] at *,
   },
+end
+
+theorem to_list_insert (y : E) (t : bintree E)
+: is_ordered t → to_list (insert y t)
+    = t.to_list.filter (key_is_lt y) ++ y :: t.to_list.filter (key_is_gt y) :=
+begin
+  intros,
+  simp [insert, to_list_set_black, to_list_insert_core, *],
 end
 
 end
@@ -434,6 +736,7 @@ end bintree
 structure ordered_tree (E : Type _) [has_preordering E] :=
 (tree : bintree E)
 (ordered : bintree.is_ordered tree)
+(root_is_black : tree.tree_color = color.black )
 
 namespace ordered_tree
 
@@ -443,11 +746,13 @@ parameters {E : Type _} [has_preordering E]
 def empty : ordered_tree E :=
 { tree := bintree.empty
 , ordered := dec_trivial
+, root_is_black := dec_trivial
 }
 
 def singleton (x : E) : ordered_tree E :=
 { tree := bintree.singleton x
 , ordered := dec_trivial
+, root_is_black := dec_trivial
 }
 
 def to_list (x : ordered_tree E) : list E := x.tree.to_list
@@ -479,6 +784,7 @@ def insert (y : E) (t : ordered_tree E) : ordered_tree E :=
   begin
     apply bintree.is_ordered_insert _ _ t.ordered,
   end
+, root_is_black := by simp [bintree.insert],
 }
 
 theorem insert_eq (y : E)

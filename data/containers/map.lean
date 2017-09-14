@@ -1,3 +1,4 @@
+/- This defines a map from key to values. -/
 import .set
 
 namespace data.containers
