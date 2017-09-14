@@ -1,0 +1,6 @@
+[package]
+name = "containers"
+version = "0.1"
+
+[dependencies]
+mathlib = {git = "git@github.com:leanprover/mathlib.git", rev = "f705963c812680897bf4ddc5504f33dcf2e60fad"}
