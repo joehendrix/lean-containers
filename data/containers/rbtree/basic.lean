@@ -174,6 +174,54 @@ end
 end ordered
 
 -----------------------------------------------------------------------
+-- well_formed
+
+section well_formed
+
+/-- Returns the height of the black nodes in the tree along the left-most path.-/
+def black_height : rbtree E → ℕ
+| empty := 0
+| (bin black l x r) := l.black_height + 1
+| (bin red   l x r) := l.black_height
+
+/--
+Returns true if the tree respects the red-black rules, namely:
+
+1. The number of black nodes along every path is the same.
+2. The children of a red node must be black.
+
+We omit the rule that the root is black.
+-/
+def well_formed : rbtree E → Prop
+| empty := true
+| (bin black l x r) := well_formed l ∧ well_formed r ∧ l.black_height = r.black_height
+| (bin red l x r)
+  := l.tree_color = black
+   ∧ r.tree_color = black
+   ∧ well_formed l ∧ well_formed r ∧ l.black_height = r.black_height
+
+instance well_formed.decidable : decidable_pred well_formed
+| empty := begin unfold well_formed, apply_instance end
+| (bin black l x r) :=
+  begin
+    unfold well_formed,
+    apply @and.decidable _ _ _ _, exact (well_formed.decidable l),
+    apply @and.decidable _ _ _ _, exact (well_formed.decidable r),
+    apply_instance,
+  end
+| (bin red l x r) :=
+  begin
+    unfold well_formed,
+    apply @and.decidable _ _ _ _, apply_instance,
+    apply @and.decidable _ _ _ _, apply_instance,
+    apply @and.decidable _ _ _ _, exact (well_formed.decidable l),
+    apply @and.decidable _ _ _ _, exact (well_formed.decidable r),
+    apply_instance,
+  end
+
+end well_formed
+
+-----------------------------------------------------------------------
 -- lookup
 
 section lookup

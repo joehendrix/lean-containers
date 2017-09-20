@@ -8,8 +8,8 @@ namespace data.containers
 
 structure ordered_tree (E : Type _) [has_preordering E] :=
 (tree : rbtree E)
-(ordered : rbtree.is_ordered tree)
---(root_is_black : tree.tree_color = color.black )
+(ordered : tree.is_ordered)
+(wf : tree.well_formed)
 
 namespace ordered_tree
 
@@ -19,18 +19,19 @@ parameters {E : Type _} [has_preordering E]
 def empty : ordered_tree E :=
 { tree := rbtree.empty
 , ordered := dec_trivial
+, wf := dec_trivial
 }
 
 def singleton (x : E) : ordered_tree E :=
 { tree := rbtree.singleton x
 , ordered := dec_trivial
+, wf := dec_trivial
 }
 
 def to_list (x : ordered_tree E) : list E := x.tree.to_list
 
 section lookup
 parameters (p : E → ordering) [monotonic_find p]
-
 
 def lookup (t : ordered_tree E) : option E := t.tree.lookup p
 
@@ -55,7 +56,7 @@ def insert (y : E) (t : ordered_tree E) : ordered_tree E :=
   begin
     apply rbtree.is_ordered_insert _ _ t.ordered,
   end
---, root_is_black := by simp [rbtree.insert],
+, wf := rbtree.well_formed_insert y t.tree t.wf,
 }
 
 theorem insert_eq (y : E)
